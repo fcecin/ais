@@ -277,7 +277,7 @@ func simulate(mapfile string, numaliens int) {
      // We also check that north/south and east/west connections between adjacent cities are consistent.
      // ---------------------------------------------------------------------------------------------------
 
-     fmt.Printf("READ %d nodes\n", len(nodes))
+     fmt.Printf("Successfully read %d cities from the input file. Checking road links...\n", len(nodes))
 
      for i := 0; i < len(nodes); i++ {
 
@@ -331,7 +331,7 @@ func simulate(mapfile string, numaliens int) {
      //   is written (empty city).
      // ---------------------------------------------------------------------------------------------------
 
-     fmt.Printf("Simulation Phase #1: Spawning %d aliens at random cities.\n", numaliens);
+     fmt.Printf("\nSimulation Phase #1: Spawning %d aliens at random cities.\n", numaliens);
 
      var liveAlienCounter = 0
 
@@ -405,7 +405,7 @@ func simulate(mapfile string, numaliens int) {
      // Alien movement phase
      // ---------------------------------------------------------------------------------------------------
 
-     fmt.Println("Simulation Phase #2: Moving aliens.\n");
+     fmt.Println("\nSimulation Phase #2: Moving aliens.\n");
 
      // We are going to run at most 10,000 movement steps.
      // Each movement step involves moving each alien randomly across a valid road to a city that has
@@ -496,7 +496,68 @@ func simulate(mapfile string, numaliens int) {
      // Serialize the simulator data model to "<mapfile>.result"
      // ---------------------------------------------------------------------------------------------------
 
-     
+     resultFileName := mapfile + ".result"
+
+     fmt.Printf("\nSimulation complete. Writing resulting map file to '%s'.\n", resultFileName);
+
+     ofile, oerr := os.Create(resultFileName)
+     if (oerr != nil) {
+        fmt.Printf("ERROR: Cannot write to simulation result output file '%s'.\n", resultFileName)
+     } else {
+        defer ofile.Close()
+        
+        for i := 0; i < len(nodes); i++ {
+
+            // Skip dead cities
+            if (nodes[i].dead) {
+               continue
+            }
+
+            // Line starts with the name of the non-destroyed city
+            line := nodes[i].cityName;
+
+            // Then we look for all valid directions that link to other non-dead
+            //   cities and append them to the output line
+            for d := 0; d < 4; d++ {
+
+                otherIdx := nodes[i].roads[d]
+
+                // No road
+                if (otherIdx == -1) {
+                   continue
+                }
+
+                // Leads to dead city
+                if (nodes[otherIdx].dead) {
+                   continue
+                }
+
+                // It's good
+
+                otherCityName := nodes[otherIdx].cityName
+                directionName := "ERROR"
+                
+                // ****************************
+                // FIXME: Do it the right way
+                // ****************************
+                switch d {
+                  case EAST:  directionName = "east"
+                  case SOUTH: directionName = "south"
+                  case WEST:  directionName = "west"
+                  case NORTH: directionName = "north"
+                }
+
+                line += " " + directionName + "=" + otherCityName;
+            }
+
+            line += "\n";
+
+            // Write out the line
+            ofile.WriteString(line)
+        }
+     }
+
+     fmt.Println("Done.");
 }
 
 // ---------------------------------------------------------------------------------------------------
