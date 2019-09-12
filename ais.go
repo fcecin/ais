@@ -14,6 +14,8 @@ import (
    "strings"
 )
 
+var rnd = rand.New(rand.NewSource(time.Now().UnixNano()))
+
 // ---------------------------------------------------------------------------------------------------
 // Map generator data model
 // ---------------------------------------------------------------------------------------------------
@@ -62,7 +64,10 @@ type SNode struct {
      cityName     string     // Name of the city ("" is an invalid name)
      roads        [4]int     // Index into a city data store of adjacent cities in the four directions
      sroads       [4]string  // Names of adjacent cities in the four directions (for the first parser pass)
+     dead         bool       // Set to true if the city has been destroyed
 }
+
+type AlienArray []int        // Index is alien number, value is index into a SNodeArray (i.e. which city)
 
 // ---------------------------------------------------------------------------------------------------
 // Print help
@@ -95,8 +100,6 @@ func printHelp() {
 func generate(mapfile string, maxx int, maxy int, cd float64, rd float64) {
      fmt.Printf("Will write mapfile '%s' with dimensions %d x %d, city density %f and road density %f.\n", mapfile, maxx, maxy, cd, rd);
 
-     rnd := rand.New(rand.NewSource(time.Now().UnixNano()))
-
      wmap := make([][]Node, maxy); 
 
      // Generate cities first, placing them freely over the world matrix.
@@ -106,9 +109,9 @@ func generate(mapfile string, maxx int, maxy int, cd float64, rd float64) {
          row := make([]Node, maxx)
          for x := 0; x < maxx; x++ {
              if (rnd.Float64() <= cd) {
-                row[x].cityName = fmt.Sprintf("X%dY%d", x, y);
+                row[x].cityName = fmt.Sprintf("X%dY%d", x, y)
              } else {
-                row[x].cityName = "";
+                row[x].cityName = ""
              }
          }
          wmap[y] = row;
@@ -122,12 +125,12 @@ func generate(mapfile string, maxx int, maxy int, cd float64, rd float64) {
 
                 // Consider creating an EAST road to connect City X,Y to City X+1,Y
                 if (x < maxx - 1) && (wmap[y][x+1].cityName != "") {
-                      wmap[y][x].roads[EAST] = rnd.Float64() <= rd;
+                      wmap[y][x].roads[EAST] = rnd.Float64() <= rd
                 }
 
                 // Consider creating a SOUTH road to connect City X,Y to City X,Y+1
                 if (y < maxy - 1) && (wmap[y+1][x].cityName != "") {
-                      wmap[y][x].roads[SOUTH] = rnd.Float64() <= rd;
+                      wmap[y][x].roads[SOUTH] = rnd.Float64() <= rd
                 }
              }
          }
@@ -140,7 +143,7 @@ func generate(mapfile string, maxx int, maxy int, cd float64, rd float64) {
      
      file, err := os.Create(mapfile)
      if (err != nil) {
-        fmt.Printf("ERROR: Cannot write to output file '%s'.\n", mapfile);
+        fmt.Printf("ERROR: Cannot write to output file '%s'.\n", mapfile)
      } else {
         defer file.Close()
 
@@ -150,7 +153,7 @@ func generate(mapfile string, maxx int, maxy int, cd float64, rd float64) {
             if (cname != "") {
                s := fmt.Sprintf("%s", cname)
                if (wmap[y][x].roads[EAST]) {
-                  s += fmt.Sprintf(" east=%s", wmap[y][x+1].cityName);
+                  s += fmt.Sprintf(" east=%s", wmap[y][x+1].cityName)
                }
                if (wmap[y][x].roads[SOUTH]) {
                   s += fmt.Sprintf(" south=%s", wmap[y+1][x].cityName);
@@ -170,7 +173,7 @@ func generate(mapfile string, maxx int, maxy int, cd float64, rd float64) {
 // ---------------------------------------------------------------------------------------------------
 
 func simulate(mapfile string, numaliens int) {
-     fmt.Printf("Will read mapfile '%s' and simulate it with %d aliens.\n", mapfile, numaliens);
+     fmt.Printf("Will read mapfile '%s' and simulate it with %d aliens.\n", mapfile, numaliens)
 
      var nodes SNodeArray = nil
      var nodeMap SNodeMap =  make(map[string]int)
@@ -181,7 +184,7 @@ func simulate(mapfile string, numaliens int) {
 
      file, err := os.Open(mapfile)
      if (err != nil) {
-        fmt.Printf("ERROR: Cannot read from input file '%s'.\n", mapfile);
+        fmt.Printf("ERROR: Cannot read from input file '%s'.\n", mapfile)
         return
      }
      defer file.Close()
@@ -206,7 +209,7 @@ func simulate(mapfile string, numaliens int) {
            // Forbid city redefinition
            _, exists := nodeMap[cityName]
            if (exists) {
-              fmt.Printf("ERROR: Duplicate city definition found: '%s'.\n", cityName);
+              fmt.Printf("ERROR: Duplicate city definition found: '%s'.\n", cityName)
               return 
            }
 
@@ -217,12 +220,13 @@ func simulate(mapfile string, numaliens int) {
            nextIndex ++;
            newNode.roads    = [4]int   {-1, -1, -1, -1};
            newNode.sroads   = [4]string{"", "", "", ""};
+           newNode.dead     = false;
 
            // Parse all DIRECTION=CITY items from this line and apply them to newNode.sroads
            for i := 1; i < len(items); i++ {
               inners := strings.Split(items[i], "=")
               if (len(inners) != 2) {
-                 fmt.Printf("ERROR: Syntax error parsing city connection in line '%s'.\n", line);
+                 fmt.Printf("ERROR: Syntax error parsing city connection in line '%s'.\n", line)
                  return
               }
 
@@ -242,7 +246,7 @@ func simulate(mapfile string, numaliens int) {
 
               var neighborName = inners[1];
               if (neighborName == cityName) {
-                 fmt.Printf("ERROR: City '%s' is being defined as a neighbor of itself.\n", cityName);
+                 fmt.Printf("ERROR: City '%s' is being defined as a neighbor of itself.\n", cityName)
                  return
               }
               newNode.sroads[dir] = neighborName;
@@ -256,14 +260,14 @@ func simulate(mapfile string, numaliens int) {
 
            // FIXME: change to an assert
            if (len(nodes) - 1 != newNode.index) {
-              fmt.Printf("ERROR: The file reader is broken. Expected index %i, found %i.\n", newNode.index, len(nodes) - 1);
+              fmt.Printf("ERROR: The file reader is broken. Expected index %i, found %i.\n", newNode.index, len(nodes) - 1)
               return
            }
         }
      }
 
      if err := scanner.Err(); err != nil {
-        fmt.Printf("ERROR: Error encountered while parsing input file '%s'.\n", mapfile);
+        fmt.Printf("ERROR: Error encountered while parsing input file '%s'.\n", mapfile)
         return
      }
 
@@ -272,6 +276,8 @@ func simulate(mapfile string, numaliens int) {
      // Compile SNode.sroads to SNode.roads (convert city names into city node indices).
      // We also check that north/south and east/west connections between adjacent cities are consistent.
      // ---------------------------------------------------------------------------------------------------
+
+     fmt.Printf("READ %d nodes\n", len(nodes))
 
      for i := 0; i < len(nodes); i++ {
 
@@ -287,7 +293,7 @@ func simulate(mapfile string, numaliens int) {
 
              idx, ok := nodeMap[neighborName];
              if (! ok) {
-                fmt.Printf("ERROR: City '%s' references an adjacent but non-existing city '%s'.\n", node.cityName, neighborName);
+                fmt.Printf("ERROR: City '%s' references an adjacent but non-existing city '%s'.\n", node.cityName, neighborName)
                 return
              }
 
@@ -318,11 +324,89 @@ func simulate(mapfile string, numaliens int) {
      fmt.Println("Done reading input file.");
 
      // ---------------------------------------------------------------------------------------------------
-     // Run simulator.
+     // Alien spawn phase.
+     // Spawn the aliens randomly, one after the other.
+     // If two aliens are spawned in the same city, they die and the city is destroyed.
+     // If we run out of cities before all aliens are spawned, the simulation ends and no result file
+     //   is written (empty city).
      // ---------------------------------------------------------------------------------------------------
 
-     
+     fmt.Printf("Simulation Phase #1: Spawning %d aliens at random cities.\n", numaliens);
 
+     var aliens AlienArray = make([]int, numaliens);
+
+     // Initialize all aliens as dead (FIXME: surely there's a better way to do this)
+
+     for i := 0; i < numaliens; i++ {
+         aliens[i] = -1
+     }
+
+     // Place aliens in sequence.
+
+     for i := 0; i < numaliens; i++ {
+
+         // Choose a random city index to place the next alien.
+
+         chosenCityIndex := -1;
+         tryCityIndex := rnd.Intn(len(nodes));
+         
+         for cs := 0; cs < len(nodes); cs ++ {
+
+             // Attempt to place alien in the city pointed by the index.
+             // If that city was already destroyed, try the next city in the array.
+
+             if (! nodes[tryCityIndex].dead) {
+                chosenCityIndex = tryCityIndex
+                break
+             }
+
+             tryCityIndex ++
+             if (tryCityIndex >= len(nodes)) {
+                tryCityIndex = 0
+             }
+         }
+
+         // Check if we have zero cities left.
+
+         if (chosenCityIndex == -1) {
+            fmt.Printf("Simulation has ended at Phase #1: no cities left to place Alien #%d. The resulting map is empty (no result map file written).\n", i)
+            return
+         }
+
+         // Place the alien.
+
+         aliens[i] = chosenCityIndex
+
+         // Check if that alien placement caused a fight.
+         // If it did, destroy the city and the two aliens involved.
+
+         for j := 0; j < numaliens; j++ {
+             if (i != j) && (aliens[j] != -1) && (aliens[j] == chosenCityIndex) {
+                fmt.Printf("City '%s' has been destroyed by spawning Alien #%d on top of Alien #%d!\n", nodes[chosenCityIndex].cityName, i, j)
+
+                // Just mark the city as dead
+                nodes[chosenCityIndex].dead = true
+
+                // Dead aliens are in no city
+                aliens[i] = -1
+                aliens[j] = -1
+
+                break
+             }
+         }
+     }
+
+     // ---------------------------------------------------------------------------------------------------
+     // Alien movement phase
+     // ---------------------------------------------------------------------------------------------------
+
+     fmt.Println("Simulation Phase #2: Moving aliens.\n");
+
+     // ---------------------------------------------------------------------------------------------------
+     // Serialize the simulator data model to "<mapfile>.result"
+     // ---------------------------------------------------------------------------------------------------
+
+          
 }
 
 func main() {
