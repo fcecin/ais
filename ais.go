@@ -58,6 +58,7 @@ type SNodeArray []SNode         // a city data store
 type SNodeMap map[string]int    // index into a city data store (access city struct's index by city name)
 
 type SNode struct {
+     index        int        // Own index in the SNodeArray
      cityName     string     // Name of the city ("" is an invalid name)
      roads        [4]int     // Index into a city data store of adjacent cities in the four directions
      sroads       [4]string  // Names of adjacent cities in the four directions (for the first parser pass)
@@ -185,6 +186,9 @@ func simulate(mapfile string, numaliens int) {
      }
      defer file.Close()
 
+     // Each new SNode is pushed to the end of the SNodeArray
+     var nextIndex = 0;
+
      scanner := bufio.NewScanner(file)
      for scanner.Scan() {
 
@@ -209,6 +213,8 @@ func simulate(mapfile string, numaliens int) {
            // Allocate a new city struct with the city name and dummy road pointers 
            newNode := new(SNode);
            newNode.cityName = cityName;
+           newNode.index    = nextIndex;
+           nextIndex ++;
            newNode.roads    = [4]int   {-1, -1, -1, -1};
            newNode.sroads   = [4]string{"", "", "", ""};
 
@@ -234,14 +240,25 @@ func simulate(mapfile string, numaliens int) {
                     return
               }
 
-              newNode.sroads[dir] = inners[1];
+              var neighborName = inners[1];
+              if (neighborName == cityName) {
+                 fmt.Printf("ERROR: City '%s' is being defined as a neighbor of itself.\n", cityName);
+                 return
+              }
+              newNode.sroads[dir] = neighborName;
            }
 
            // Store the first-pass node data in the node array 
            nodes = append(nodes, *newNode);
 
            // Update the node map that helps us find a city's index in the node array by its name 
-           nodeMap[newNode.cityName] = len(nodes) - 1;           
+           nodeMap[newNode.cityName] = newNode.index;
+
+           // FIXME: change to an assert
+           if (len(nodes) - 1 != newNode.index) {
+              fmt.Printf("ERROR: The file reader is broken. Expected index %i, found %i.\n", newNode.index, len(nodes) - 1);
+              return
+           }
         }
      }
 
@@ -258,12 +275,53 @@ func simulate(mapfile string, numaliens int) {
 
      for i := 0; i < len(nodes); i++ {
 
+         var node *SNode = &nodes[i]
          
+         for d := 0; d < 4; d++ {
+
+             neighborName := node.sroads[d];
+
+             if (neighborName == "") {
+                continue
+             }
+
+             idx, ok := nodeMap[neighborName];
+             if (! ok) {
+                fmt.Printf("ERROR: City '%s' references an adjacent but non-existing city '%s'.\n", node.cityName, neighborName);
+                return
+             }
+
+             node.roads[d] = idx;
+
+             // Now, either the neighbor hasn't defined the backlink to us, or if they did, it must point
+             //   to us as well. If they did not define it, we will set it now.
+             // (We use the node name for this check, since it is filled up from the previous pass)
+
+             // This converds the ESWN "d" into its cardinal opposite as "od"
+             // E.g. NORTH ( 3 ), becomes SOUTH ( 1 ).
+             od := d;
+             od += 2;
+             od = od % 4;
+
+             var neighNode *SNode = &nodes[idx];
+
+             if (neighNode.sroads[od] == "") || (neighNode.sroads[od] == node.sroads[d]) {
+                neighNode.roads[od] = node.index;
+             } else {
+                fmt.Printf("ERROR: City '%s' declares a %d road to city '%s', but the inverse %d road points to '%s' instead.\n",
+                                   node.cityName, d, neighNode.cityName, od, neighNode.sroads[od])
+                return
+             }
+         }
      }
+
+     fmt.Println("Done reading input file.");
 
      // ---------------------------------------------------------------------------------------------------
      // Run simulator.
      // ---------------------------------------------------------------------------------------------------
+
+     
 
 }
 
