@@ -156,7 +156,7 @@ func generate(mapfile string, maxx int, maxy int, cd float64, rd float64) {
                   s += fmt.Sprintf(" east=%s", wmap[y][x+1].cityName)
                }
                if (wmap[y][x].roads[SOUTH]) {
-                  s += fmt.Sprintf(" south=%s", wmap[y+1][x].cityName);
+                  s += fmt.Sprintf(" south=%s", wmap[y+1][x].cityName)
                }
                s += "\n"
                file.WriteString(s)
@@ -333,6 +333,8 @@ func simulate(mapfile string, numaliens int) {
 
      fmt.Printf("Simulation Phase #1: Spawning %d aliens at random cities.\n", numaliens);
 
+     var liveAlienCounter = 0
+
      var aliens AlienArray = make([]int, numaliens);
 
      // Initialize all aliens as dead (FIXME: surely there's a better way to do this)
@@ -376,6 +378,7 @@ func simulate(mapfile string, numaliens int) {
          // Place the alien.
 
          aliens[i] = chosenCityIndex
+         liveAlienCounter ++
 
          // Check if that alien placement caused a fight.
          // If it did, destroy the city and the two aliens involved.
@@ -391,6 +394,8 @@ func simulate(mapfile string, numaliens int) {
                 aliens[i] = -1
                 aliens[j] = -1
 
+                liveAlienCounter -= 2
+
                 break
              }
          }
@@ -402,12 +407,101 @@ func simulate(mapfile string, numaliens int) {
 
      fmt.Println("Simulation Phase #2: Moving aliens.\n");
 
+     // We are going to run at most 10,000 movement steps.
+     // Each movement step involves moving each alien randomly across a valid road to a city that has
+     //   not been destroyed (some aliens can be trapped and unable to move, but if there IS a single
+     //   valid path out of their current city, they must be able to take it).
+
+     for r := 0; r < 10000; r++ {
+
+         if (liveAlienCounter <= 0) {
+            fmt.Printf("We have %d aliens left alive at iteration %d. Stopping the simulator.\n", liveAlienCounter, r)
+            break
+         }
+
+         for i := 0; i < numaliens; i++ {
+
+             if (aliens[i] == -1) {
+                continue    // skip movement on dead aliens
+             }
+
+             // Get a reference to the simulation node where Alien #"i" is
+
+             var anode *SNode = &nodes[aliens[i]]
+
+             // Choose one of the four directions to roam
+
+             chosenDirection := -1;
+             destCityIndex   := -1;
+             tryDirection    := rnd.Intn(4);
+         
+             for dr := 0; dr < 4; dr ++ {
+
+                 // Check if that direction is a valid movement direction
+                 
+                 destCityIndex = anode.roads[tryDirection]
+
+                 // Skip roads to nowhere (-1) and roads to cities that are already dead
+                 if (destCityIndex != -1) && (! nodes[destCityIndex].dead) {
+                    chosenDirection = tryDirection
+                    break
+                 }
+
+                 tryDirection ++
+                 if (tryDirection >= 4) { // FIXME: replace all magic "4"s with MAX_DIRECTION
+                    tryDirection = 0
+                 }
+             }
+         
+
+             // Check if the alien has nowhere to go.
+
+             if (chosenDirection == -1) {
+                 continue // Alien is just trapped.
+             }
+
+             // Move the alien.
+
+             // FIXME: Should be an assert.
+             if (destCityIndex == -1) || (nodes[destCityIndex].dead) {
+                fmt.Println("ERROR: Simulator has a bug, moving Alien #%d to a bad destCityIndex %d.", i, destCityIndex)
+                return
+             }
+
+             aliens[i] = destCityIndex;
+
+             // Check if the destination city (where alien i moved in) didn't already have an alien in it.
+             // If so, they fight, both die and the city is destroyed.
+
+             for j := 0; j < numaliens; j++ {
+                 if (i != j) && (aliens[j] != -1) && (aliens[j] == destCityIndex) {
+                    fmt.Printf("City '%s' has been destroyed by Alien #%d and Alien #%d!\n", nodes[destCityIndex].cityName, i, j)
+
+                    // Just mark the city as dead
+                    nodes[destCityIndex].dead = true
+
+                    // Dead aliens are in no city
+                    aliens[i] = -1
+                    aliens[j] = -1
+
+                    liveAlienCounter -= 2
+
+                    break
+                 }
+             }
+         }
+     }
+
      // ---------------------------------------------------------------------------------------------------
      // Serialize the simulator data model to "<mapfile>.result"
      // ---------------------------------------------------------------------------------------------------
 
-          
+     
 }
+
+// ---------------------------------------------------------------------------------------------------
+// Main
+// ---------------------------------------------------------------------------------------------------
 
 func main() {
 	fmt.Println("Alien Invasion Simulator!\n")
