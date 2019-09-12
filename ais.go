@@ -10,13 +10,22 @@ import (
    "strconv"
    "math/rand"
    "time"
+   "bufio"
+   "strings"
 )
+
+// ---------------------------------------------------------------------------------------------------
+// Map generator data model
+// ---------------------------------------------------------------------------------------------------
+
+// The map generator produces a regular 2D grid of nodes, where each node may or
+//   may not contain a city.
 
 // Indices for Node.roads
 const EAST  int = 0;
 const SOUTH int = 1;
 
-// A node in our map memory model.
+// A node in our map data model.
 // NORTH and WEST roads can be obtained by reading the SOUTH and EAST roads
 //   of the previous node.
 //
@@ -27,6 +36,36 @@ type Node struct {
 
 // A world map.
 type World [][]Node;
+
+// ---------------------------------------------------------------------------------------------------
+// Simulator data model
+// ---------------------------------------------------------------------------------------------------
+
+// The simulator does not assume that the provided input file conforms to any topological
+//   constraints, so its data model is different from the generator's simple model.
+// Each city node (SNode) that we read in has pointers for other city nodes that lie in the
+//   four cardinal directions. The only assumption we make is that if city A has a "north"
+//   connection to city B, then city B has a "south" connection to city A (and similar to east-west
+//   roads). If the input file violates that (e.g. city B has a "south" connection to some city "C"
+//   instead) then we abort the simulator with an error.
+
+// Additional indices for SNode.roads
+const WEST  int = 2;
+const NORTH int = 3;
+
+type SNodeArray []SNode         // a city data store
+
+type SNodeMap map[string]int    // index into a city data store (access city struct's index by city name)
+
+type SNode struct {
+     cityName     string     // Name of the city ("" is an invalid name)
+     roads        [4]int     // Index into a city data store of adjacent cities in the four directions
+     sroads       [4]string  // Names of adjacent cities in the four directions (for the first parser pass)
+}
+
+// ---------------------------------------------------------------------------------------------------
+// Print help
+// ---------------------------------------------------------------------------------------------------
 
 func printHelp() {
      fmt.Println();
@@ -48,8 +87,12 @@ func printHelp() {
      fmt.Println();
 }
 
+// ---------------------------------------------------------------------------------------------------
+// Map file generator
+// ---------------------------------------------------------------------------------------------------
+
 func generate(mapfile string, maxx int, maxy int, cd float64, rd float64) {
-     fmt.Printf("TODO: Will write mapfile '%s' with dimensions %d x %d, city density %f and road density %f.\n", mapfile, maxx, maxy, cd, rd);
+     fmt.Printf("Will write mapfile '%s' with dimensions %d x %d, city density %f and road density %f.\n", mapfile, maxx, maxy, cd, rd);
 
      rnd := rand.New(rand.NewSource(time.Now().UnixNano()))
 
@@ -117,16 +160,111 @@ func generate(mapfile string, maxx int, maxy int, cd float64, rd float64) {
           }
         }
      }
+
+     fmt.Println("Done.");
 }
 
+// ---------------------------------------------------------------------------------------------------
+// Map file parser and simulator
+// ---------------------------------------------------------------------------------------------------
+
 func simulate(mapfile string, numaliens int) {
-     fmt.Printf("TODO: Will read mapfile '%s' and simulate it with %d aliens.\n", mapfile, numaliens);
+     fmt.Printf("Will read mapfile '%s' and simulate it with %d aliens.\n", mapfile, numaliens);
 
+     var nodes SNodeArray = nil
+     var nodeMap SNodeMap =  make(map[string]int)
+
+     // ---------------------------------------------------------------------------------------------------
      // Read map file.
-     // The parser doesn't require that two adjacent cities inform that they have a connecting road to each other.
-     // So, you only need one of a pair of adjacent cities to inform that there's a connection between them.
+     // ---------------------------------------------------------------------------------------------------
 
-     
+     file, err := os.Open(mapfile)
+     if (err != nil) {
+        fmt.Printf("ERROR: Cannot read from input file '%s'.\n", mapfile);
+        return
+     }
+     defer file.Close()
+
+     scanner := bufio.NewScanner(file)
+     for scanner.Scan() {
+
+        // Fetch a new line from the input file to process
+        line := scanner.Text()
+
+        // Line is some tokens separated by a space
+        items := strings.Split(line, " ")
+
+        // If the line isn't empty, it denotes a new city definition
+        if (len(items) >= 1) {
+
+           cityName := items[0];
+
+           // Forbid city redefinition
+           _, exists := nodeMap[cityName]
+           if (exists) {
+              fmt.Printf("ERROR: Duplicate city definition found: '%s'.\n", cityName);
+              return 
+           }
+
+           // Allocate a new city struct with the city name and dummy road pointers 
+           newNode := new(SNode);
+           newNode.cityName = cityName;
+           newNode.roads    = [4]int   {-1, -1, -1, -1};
+           newNode.sroads   = [4]string{"", "", "", ""};
+
+           // Parse all DIRECTION=CITY items from this line and apply them to newNode.sroads
+           for i := 1; i < len(items); i++ {
+              inners := strings.Split(items[i], "=")
+              if (len(inners) != 2) {
+                 fmt.Printf("ERROR: Syntax error parsing city connection in line '%s'.\n", line);
+                 return
+              }
+
+              // **********************************************
+              // FIXME: Make a name->int const map instead.
+              // **********************************************
+              var dir int;
+              switch inners[0] {
+                 case "east":   dir = EAST;
+                 case "south":  dir = SOUTH;
+                 case "west":   dir = WEST;
+                 case "north":  dir = NORTH;
+                 default:
+                    fmt.Printf("ERROR: Unknown cardinal direction '%s' in line '%s'.\n", inners[0], line);
+                    return
+              }
+
+              newNode.sroads[dir] = inners[1];
+           }
+
+           // Store the first-pass node data in the node array 
+           nodes = append(nodes, *newNode);
+
+           // Update the node map that helps us find a city's index in the node array by its name 
+           nodeMap[newNode.cityName] = len(nodes) - 1;           
+        }
+     }
+
+     if err := scanner.Err(); err != nil {
+        fmt.Printf("ERROR: Error encountered while parsing input file '%s'.\n", mapfile);
+        return
+     }
+
+     // ---------------------------------------------------------------------------------------------------
+     // Now we have read all of the cities from the file (we only do one reading pass on the file).
+     // Compile SNode.sroads to SNode.roads (convert city names into city node indices).
+     // We also check that north/south and east/west connections between adjacent cities are consistent.
+     // ---------------------------------------------------------------------------------------------------
+
+     for i := 0; i < len(nodes); i++ {
+
+         
+     }
+
+     // ---------------------------------------------------------------------------------------------------
+     // Run simulator.
+     // ---------------------------------------------------------------------------------------------------
+
 }
 
 func main() {
