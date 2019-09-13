@@ -5,7 +5,7 @@
 package main
 
 import (
-	"fmt"
+   "fmt"
    "os"
    "strconv"
    "math/rand"
@@ -62,9 +62,10 @@ type SNodeMap map[string]int    // index into a city data store (access city str
 type SNode struct {
      index        int        // Own index in the SNodeArray
      cityName     string     // Name of the city ("" is an invalid name)
-     roads        [4]int     // Index into a city data store of adjacent cities in the four directions
-     sroads       [4]string  // Names of adjacent cities in the four directions (for the first parser pass)
+     roads        [4]int     // Index into a city data store of adjacent cities in the four directions, -1 if none
+     sroads       [4]string  // Names of adjacent cities in the four directions (for the first parser pass), "" if none
      dead         bool       // Set to true if the city has been destroyed
+     alienid      int        // Alien that is present in this city, or -1 if none
 }
 
 type AlienArray []int        // Index is alien number, value is index into a SNodeArray (i.e. which city)
@@ -221,6 +222,7 @@ func simulate(mapfile string, numaliens int) {
            newNode.roads    = [4]int   {-1, -1, -1, -1};
            newNode.sroads   = [4]string{"", "", "", ""};
            newNode.dead     = false;
+           newNode.alienid  = -1;
 
            // Parse all DIRECTION=CITY items from this line and apply them to newNode.sroads
            for i := 1; i < len(items); i++ {
@@ -383,21 +385,29 @@ func simulate(mapfile string, numaliens int) {
          // Check if that alien placement caused a fight.
          // If it did, destroy the city and the two aliens involved.
 
-         for j := 0; j < numaliens; j++ {
-             if (i != j) && (aliens[j] != -1) && (aliens[j] == chosenCityIndex) {
-                fmt.Printf("City '%s' has been destroyed by spawning Alien #%d on top of Alien #%d!\n", nodes[chosenCityIndex].cityName, i, j)
+         existingAlienIdx := nodes[chosenCityIndex].alienid
 
-                // Just mark the city as dead
-                nodes[chosenCityIndex].dead = true
+         if (existingAlienIdx != -1) {
 
-                // Dead aliens are in no city
-                aliens[i] = -1
-                aliens[j] = -1
+             //for j := 0; j < numaliens; j++ {
+             //if (i != j) && (aliens[j] != -1) && (aliens[j] == chosenCityIndex) {
+             
+             fmt.Printf("City '%s' has been destroyed by spawning Alien #%d on top of Alien #%d!\n", nodes[chosenCityIndex].cityName, i, existingAlienIdx)
 
-                liveAlienCounter -= 2
+             // Just mark the city as dead
+             nodes[chosenCityIndex].dead = true
 
-                break
-             }
+             // Dead aliens are in no city
+             aliens[i] = -1
+             aliens[existingAlienIdx] = -1
+
+             liveAlienCounter -= 2
+
+             //break
+         } else {
+
+             // No fight, so just cache the alien's city location in the city node itself
+             nodes[chosenCityIndex].alienid = i;
          }
      }
 
@@ -468,29 +478,40 @@ func simulate(mapfile string, numaliens int) {
                 return
              }
 
+             nodes[aliens[i]].alienid = -1    // remove this alien from the previous location's alienid cache
+
              aliens[i] = destCityIndex;
 
              // Check if the destination city (where alien i moved in) didn't already have an alien in it.
              // If so, they fight, both die and the city is destroyed.
 
-             for j := 0; j < numaliens; j++ {
-                 if (i != j) && (aliens[j] != -1) && (aliens[j] == destCityIndex) {
-                    fmt.Printf("City '%s' has been destroyed by Alien #%d and Alien #%d!\n", nodes[destCityIndex].cityName, i, j)
+             existingAlienIdx := nodes[destCityIndex].alienid
+
+             //for j := 0; j < numaliens; j++ {
+             //if (i != j) && (aliens[j] != -1) && (aliens[j] == destCityIndex) {
+
+             if (existingAlienIdx != -1) {
+                    fmt.Printf("City '%s' has been destroyed by Alien #%d and Alien #%d!\n", nodes[destCityIndex].cityName, i, existingAlienIdx)
 
                     // Just mark the city as dead
                     nodes[destCityIndex].dead = true
 
                     // Dead aliens are in no city
                     aliens[i] = -1
-                    aliens[j] = -1
+                    aliens[existingAlienIdx] = -1
 
                     liveAlienCounter -= 2
 
-                    break
-                 }
+                    //break
+             } else {
+
+                    // Cache the alien into the new location
+                    nodes[destCityIndex].alienid = i
              }
          }
      }
+
+     fmt.Printf("Simulation complete. Aliens remaining alive: %d\n", liveAlienCounter);
 
      // ---------------------------------------------------------------------------------------------------
      // Serialize the simulator data model to "<mapfile>.result"
@@ -498,7 +519,7 @@ func simulate(mapfile string, numaliens int) {
 
      resultFileName := mapfile + ".result"
 
-     fmt.Printf("\nSimulation complete. Writing resulting map file to '%s'.\n", resultFileName);
+     fmt.Printf("\nWriting resulting map file to '%s'.\n", resultFileName);
 
      ofile, oerr := os.Create(resultFileName)
      if (oerr != nil) {
