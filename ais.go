@@ -417,7 +417,11 @@ func simulate(mapfile string, numaliens int) {
 	//   not been destroyed (some aliens can be trapped and unable to move, but if there IS a single
 	//   valid path out of their current city, they must be able to take it).
 
-	for r := 0; r < 10000; r++ {
+	var dot bool = false;
+	var percent int = 0;
+	const maxIter int = 10000;
+	
+	for r := 0; r < maxIter; r++ {
 
 		if (liveAlienCounter <= 0) {
 			fmt.Printf("We have %d aliens left alive at iteration %d. Stopping the simulator.\n", liveAlienCounter, r)
@@ -482,6 +486,12 @@ func simulate(mapfile string, numaliens int) {
 			existingAlienIdx := nodes[destCityIndex].alienid
 
 			if (existingAlienIdx != -1) {
+
+				if (dot) {
+					dot = false
+					fmt.Printf("\n")
+				}
+				
 				fmt.Printf("City '%s' has been destroyed by Alien #%d and Alien #%d!\n", nodes[destCityIndex].cityName, i, existingAlienIdx)
 
 				// Just mark the city as dead
@@ -498,9 +508,18 @@ func simulate(mapfile string, numaliens int) {
 				nodes[destCityIndex].alienid = i
 			}
 		}
+
+		fmt.Printf(".")
+		dot = true
+
+		var newPercent int = 100 * r / maxIter;
+		if (newPercent > percent) {
+			percent = newPercent
+			fmt.Printf("(%d%%)", percent);
+		}
 	}
 
-	fmt.Printf("Simulation complete. Aliens remaining alive: %d\n", liveAlienCounter);
+	fmt.Printf("\nSimulation complete. Aliens remaining alive: %d\n", liveAlienCounter);
 
 	// ---------------------------------------------------------------------------------------------------
 	// Serialize the simulator data model to "<mapfile>.result"
