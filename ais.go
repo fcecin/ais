@@ -313,7 +313,7 @@ func simulate(mapfile string, numaliens int) {
 
 			var neighNode *SNode = &nodes[idx];
 
-			if (neighNode.sroads[od] == "") || (neighNode.sroads[od] == node.sroads[d]) {
+			if (neighNode.sroads[od] == "") || (neighNode.sroads[od] == node.cityName) {
 				neighNode.roads[od] = node.index;
 			} else {
 				fmt.Printf("ERROR: City '%s' declares a %d road to city '%s', but the inverse %d road points to '%s' instead.\n",
